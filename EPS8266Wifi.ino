@@ -2,8 +2,12 @@
 #include <SoftwareSerial.h>
 #include "MsgBuf.h"
 
-SoftwareSerial mySerial(9, 8); // RX, TX
+// SoftwareSerial swSerial(9, 8); // RX, TX UNO
 
+//SoftwareSerial swSerial(62, 46); // RX, TX
+int rxPin = 62;
+int txPin = 57;
+SoftwareSerial swSerial(rxPin, txPin); // RX, TX
 int connectionId;
 MsgBuf mbuf = MsgBuf(64);
 MsgBuf wbuf = MsgBuf(2);
@@ -12,16 +16,49 @@ int cp;
 
 void setup()
 {
+
   Serial.begin(9600);
-  mySerial.begin(9600);
+
+  pinMode(txPin, OUTPUT);
+  pinMode(rxPin, INPUT);
+  swSerial.begin(9600);
+  
   Serial.println(F("****************************"));
   Serial.println(F("*** WIFI STARTED 2017.11 ***"));
   Serial.println(F("****************************"));
-  sendData(F("AT+RST\r\n"), 3000, true);
-  sendData(F("AT+GMR\r\n"), 5000, true);
+  sendData("AT+RST\r\n", 1000, true);
+  sendData("AT+GMR\r\n", 5000, true);
   sendData(F("AT+CIFSR\r\n"), 1000, true);
   sendData(F("AT+CIPMUX=1\r\n"), 1000, true);        // configure for multiple connections
   sendData(F("AT+CIPSERVER=1,80\r\n"), 1000, true); // turn on server on port 80
+}
+
+void loop() // run over and over
+{
+  bypassTerminal();
+  return;
+  int n  = readAll();
+  if ( n > 0 ) {
+    _printf("\n===\n%s\n===", wbuf.getBuf());
+    TCP_parse();
+  }
+}
+
+// #########################################################################
+// ## PORTING TEST after SW_Serial(pin)
+// #########################################################################
+
+// AT+GMR : Version
+// RST,
+// AT+CIFSR
+
+void bypassTerminal() {
+  while (swSerial.available() ) {
+    Serial.write(swSerial.read());
+  }
+  while (Serial.available() ) {
+    swSerial.write(Serial.read());
+  }
 }
 
 double toFloat(char* buf, char*debug) {
@@ -32,6 +69,8 @@ double toFloat(char* buf, char*debug) {
   _printf("[%s] = <%s>", debug , dtostrf(vf, 10, 10, dispBuf));
   return vf;
 }
+
+
 
 void TCP_parse() {
   char buf[32];
@@ -63,8 +102,8 @@ int readAll() {
   int retryCnt = 0;
   wbuf.clear();
   while (true) {
-    while (mySerial.available() && wbuf.available()) {
-      char c = mySerial.read();  // read the next character
+    while (swSerial.available() && wbuf.available()) {
+      char c = swSerial.read();  // read the next character
       wbuf.append(c);
       retryCnt = 5;
     }
@@ -78,14 +117,6 @@ int readAll() {
   return wbuf.size();
 }
 
-void loop() // run over and over
-{
-  int n  = readAll();
-  if ( n > 0 ) {
-    _printf("\n===\n%s\n===", wbuf.getBuf());
-    HTTP_request_parse();
-  }
-}
 
 // ************************************************************
 // ** WIFI
@@ -109,11 +140,11 @@ void espsend(String d) {
 
 void sendData(String command, const int timeout, boolean debug) {
   mbuf.clear();
-  mySerial.print(command);
+  swSerial.print(command);
   long int time = millis();
   while ( (time + timeout) > millis()) {
-    while (mySerial.available()) {
-      char c = mySerial.read();  // read the next character
+    while (swSerial.available()) {
+      char c = swSerial.read();  // read the next character
       mbuf.append(c);
     }
     if ( mbuf.indexOf("OK") > 0 ) {
